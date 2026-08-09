@@ -5,6 +5,7 @@ from utils.chunker import split_text
 from utils.vector_store import create_vector_store
 from utils.qa_chain import answer_question
 
+
 # ---------------------------------------------------
 # Page Configuration
 # ---------------------------------------------------
@@ -14,10 +15,25 @@ st.set_page_config(
     layout="wide"
 )
 
+
+# ---------------------------------------------------
+# Initialize Session State
+# ---------------------------------------------------
+if "vector_store" not in st.session_state:
+    st.session_state.vector_store = None
+
+if "document_name" not in st.session_state:
+    st.session_state.document_name = None
+
+if "chunk_count" not in st.session_state:
+    st.session_state.chunk_count = 0
+
+
 # ---------------------------------------------------
 # Sidebar
 # ---------------------------------------------------
 with st.sidebar:
+
     st.title("📂 Upload Documents")
 
     uploaded_files = st.file_uploader(
@@ -27,117 +43,173 @@ with st.sidebar:
     )
 
     st.markdown("---")
+
     st.info("Supported Format: PDF")
+
+    # Document information
+    if st.session_state.vector_store:
+
+        st.markdown("### 📊 Document Information")
+
+        st.write(
+            f"**Document:** "
+            f"{st.session_state.document_name}"
+        )
+
+        st.write(
+            f"**Chunks:** "
+            f"{st.session_state.chunk_count}"
+        )
+
+        if st.button("🗑️ Clear Document"):
+
+            st.session_state.vector_store = None
+            st.session_state.document_name = None
+            st.session_state.chunk_count = 0
+
+            st.rerun()
+
 
 # ---------------------------------------------------
 # Main Page
 # ---------------------------------------------------
 st.title("📄 DocuMind AI")
 
-st.subheader("Intelligent Document Question Answering System")
+st.subheader(
+    "Intelligent Document Question Answering System"
+)
 
 st.write(
     """
-    Upload one or more PDF documents and ask questions about their contents.
-    The AI will search the uploaded documents and answer based on their content.
+    Upload a PDF document and ask questions about its
+    contents. DocuMind AI uses semantic search and
+    generative AI to find and explain relevant information.
     """
 )
 
 st.markdown("---")
 
+
 # ---------------------------------------------------
-# Process Uploaded Files
+# Process Uploaded Documents
 # ---------------------------------------------------
 if uploaded_files:
 
-    st.success(f"✅ {len(uploaded_files)} file(s) uploaded successfully!")
+    # Currently we process the first document.
+    # Multi-document retrieval will be added later.
+    file = uploaded_files[0]
 
-    for file in uploaded_files:
+    # Only process if this is a new document
+    if (
+        st.session_state.document_name != file.name
+        or st.session_state.vector_store is None
+    ):
 
-        # -----------------------------------------
-        # File Information
-        # -----------------------------------------
-        st.subheader(f"📄 {file.name}")
+        with st.spinner("📚 Processing document..."):
 
-        file_size = round(file.size / (1024 * 1024), 2)
+            # -----------------------------------------
+            # Extract Text
+            # -----------------------------------------
+            text = extract_text_from_pdf(file)
 
-        st.write(f"**Size:** {file_size} MB")
+            if not text.strip():
 
-        st.markdown("---")
+                st.error(
+                    "❌ No text could be extracted from this PDF."
+                )
 
-        # -----------------------------------------
-        # Extract Text
-        # -----------------------------------------
-        text = extract_text_from_pdf(file)
+                st.stop()
 
-        st.markdown("## 📄 Extracted Text")
+            # -----------------------------------------
+            # Split Text
+            # -----------------------------------------
+            chunks = split_text(text)
 
-        st.text_area(
-            label="",
-            value=text,
-            height=250,
-            key=f"text_{file.name}"
+            # -----------------------------------------
+            # Create FAISS Vector Store
+            # -----------------------------------------
+            vector_store = create_vector_store(chunks)
+
+            # -----------------------------------------
+            # Save to Session State
+            # -----------------------------------------
+            st.session_state.vector_store = vector_store
+            st.session_state.document_name = file.name
+            st.session_state.chunk_count = len(chunks)
+
+        st.success(
+            f"✅ {file.name} processed successfully!"
         )
 
-        # -----------------------------------------
-        # Chunk Text
-        # -----------------------------------------
-        chunks = split_text(text)
 
-        st.markdown("## ✂️ Document Chunks")
+# ---------------------------------------------------
+# Document Status
+# ---------------------------------------------------
+if st.session_state.vector_store:
 
-        st.write(f"**Total Chunks:** {len(chunks)}")
+    st.markdown("### 📄 Current Document")
 
-        for i, chunk in enumerate(chunks):
-
-            with st.expander(f"Chunk {i+1}"):
-
-                st.write(chunk)
-        
-
-        # -----------------------------------------
-        # Create Vector Store
-        # -----------------------------------------
-        vector_store = create_vector_store(chunks)
-
-        st.success("✅ Vector database created successfully!")
-
-        st.write(f"Indexed **{len(chunks)}** chunks.")
-
-        # Store vector store for future use
-        st.session_state["vector_store"] = vector_store
-
-        st.markdown("---")
+    st.success(
+        f"**{st.session_state.document_name}** "
+        f"• {st.session_state.chunk_count} chunks indexed"
+    )
 
     st.markdown("---")
-st.header("💬 Ask Questions")
 
-question = st.text_input(
-    "Ask something about the uploaded document",
-    placeholder="Example: What is Machine Learning?"
-)
+    # ------------------------------------------------
+    # Question Answering
+    # ------------------------------------------------
+    st.header("💬 Ask Your Document")
 
-if question:
+    question = st.text_input(
+        "Ask a question",
+        placeholder="Example: What are the main findings?"
+    )
 
-    with st.spinner("Searching document..."):
+    if st.button("🔍 Ask DocuMind"):
 
-        answer, docs = answer_question(
-            vector_store,
-            question
-        )
+        if not question.strip():
 
-    st.success("Answer")
+            st.warning("Please enter a question.")
 
-    st.write(answer)
+        else:
 
-    st.markdown("### Retrieved Context")
+            with st.spinner("🤔 Searching the document..."):
 
-    for i, doc in enumerate(docs):
+                try:
 
-        with st.expander(f"Chunk {i+1}"):
+                    answer, docs = answer_question(
+                        st.session_state.vector_store,
+                        question
+                    )
 
-            st.write(doc.page_content)
+                    st.markdown("### 🤖 Answer")
+
+                    st.write(answer)
+
+                    # --------------------------------
+                    # Retrieved Sources
+                    # --------------------------------
+                    st.markdown("### 📚 Retrieved Sources")
+
+                    for i, doc in enumerate(docs):
+
+                        with st.expander(
+                            f"Source {i + 1}"
+                        ):
+
+                            st.write(
+                                doc.page_content
+                            )
+
+                except Exception as e:
+
+                    st.error(
+                        f"❌ Something went wrong: {e}"
+                    )
 
 else:
 
-    st.info("👈 Upload one or more PDF documents to get started.")
+    st.info(
+        "👈 Upload a PDF from the sidebar to get started."
+    )
