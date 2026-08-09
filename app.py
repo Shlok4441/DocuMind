@@ -1,5 +1,6 @@
 import streamlit as st
 from utils.pdf_loader import extract_text_from_pdf
+from utils.chunker import split_text
 # ----------------------------
 # Page Configuration
 # ----------------------------
@@ -80,3 +81,16 @@ else:
         st.write(f"📄 **{file.name}**")
         st.write(f"Size: {file_size} MB")
         st.write("---")
+
+text = extract_text_from_pdf(file)
+chunks = split_text(text)
+
+st.markdown("## Document Chunks")
+
+st.write(f"Total Chunks: {len(chunks)}")
+
+for i, chunk in enumerate(chunks):
+
+    with st.expander(f"Chunk {i+1}"):
+
+        st.write(chunk)
