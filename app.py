@@ -3,6 +3,7 @@ import streamlit as st
 from utils.pdf_loader import extract_text_from_pdf
 from utils.chunker import split_text
 from utils.vector_store import create_vector_store
+from utils.qa_chain import answer_question
 
 # ---------------------------------------------------
 # Page Configuration
@@ -92,6 +93,7 @@ if uploaded_files:
             with st.expander(f"Chunk {i+1}"):
 
                 st.write(chunk)
+        
 
         # -----------------------------------------
         # Create Vector Store
@@ -106,6 +108,35 @@ if uploaded_files:
         st.session_state["vector_store"] = vector_store
 
         st.markdown("---")
+
+    st.markdown("---")
+st.header("💬 Ask Questions")
+
+question = st.text_input(
+    "Ask something about the uploaded document",
+    placeholder="Example: What is Machine Learning?"
+)
+
+if question:
+
+    with st.spinner("Searching document..."):
+
+        answer, docs = answer_question(
+            vector_store,
+            question
+        )
+
+    st.success("Answer")
+
+    st.write(answer)
+
+    st.markdown("### Retrieved Context")
+
+    for i, doc in enumerate(docs):
+
+        with st.expander(f"Chunk {i+1}"):
+
+            st.write(doc.page_content)
 
 else:
 
