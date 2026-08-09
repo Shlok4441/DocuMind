@@ -1,6 +1,7 @@
 import streamlit as st
 from utils.pdf_loader import extract_text_from_pdf
 from utils.chunker import split_text
+from utils.embeddings import generate_embeddings
 # ----------------------------
 # Page Configuration
 # ----------------------------
@@ -94,3 +95,15 @@ for i, chunk in enumerate(chunks):
     with st.expander(f"Chunk {i+1}"):
 
         st.write(chunk)
+
+embeddings = generate_embeddings(chunks)
+
+st.markdown("## Embedding Information")
+
+st.write(f"Generated embeddings: {len(embeddings)}")
+
+st.write(f"Embedding Dimension: {len(embeddings[0])}")
+
+st.write("First 10 Values")
+
+st.write(embeddings[0][:10])
