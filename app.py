@@ -1,5 +1,5 @@
 import streamlit as st
-
+from utils.pdf_loader import extract_text_from_pdf
 # ----------------------------
 # Page Configuration
 # ----------------------------
@@ -47,6 +47,30 @@ if uploaded_files:
 
     st.success(f"✅ {len(uploaded_files)} file(s) uploaded successfully!")
 
+    for file in uploaded_files:
+
+        st.subheader(file.name)
+
+        file_size = round(file.size / (1024 * 1024), 2)
+
+        st.write(f"**Size:** {file_size} MB")
+
+        text = extract_text_from_pdf(file)
+
+        st.markdown("### Extracted Text")
+
+        st.text_area(
+            label="",
+            value=text,
+            height=300
+        )
+
+else:
+
+    st.info("Please upload one or more PDF documents.")
+
+    st.success(f"✅ {len(uploaded_files)} file(s) uploaded successfully!")
+
     st.subheader("Uploaded Documents")
 
     for file in uploaded_files:
@@ -56,7 +80,3 @@ if uploaded_files:
         st.write(f"📄 **{file.name}**")
         st.write(f"Size: {file_size} MB")
         st.write("---")
-
-else:
-
-    st.info("Please upload one or more PDF documents.")
