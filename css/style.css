@@ -1,0 +1,43 @@
+/* -----------------------------------------
+   General Layout
+----------------------------------------- */
+
+.main {
+    padding-top: 2rem;
+}
+
+
+/* -----------------------------------------
+   Document Card
+----------------------------------------- */
+
+.document-card {
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    margin-bottom: 1rem;
+}
+
+
+/* -----------------------------------------
+   Answer Card
+----------------------------------------- */
+
+.answer-card {
+    padding: 1.5rem;
+    border-radius: 14px;
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    margin-top: 1rem;
+}
+
+
+/* -----------------------------------------
+   Source Card
+----------------------------------------- */
+
+.source-card {
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    margin-bottom: 0.75rem;
+}

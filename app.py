@@ -9,16 +9,41 @@ from utils.qa_chain import answer_question
 # ---------------------------------------------------
 # Page Configuration
 # ---------------------------------------------------
+
 st.set_page_config(
     page_title="DocuMind AI",
     page_icon="📄",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 
 # ---------------------------------------------------
-# Initialize Session State
+# Load Custom CSS
 # ---------------------------------------------------
+
+def load_css():
+
+    try:
+
+        with open("css/style.css") as f:
+            st.markdown(
+                f"<style>{f.read()}</style>",
+                unsafe_allow_html=True
+            )
+
+    except FileNotFoundError:
+
+        pass
+
+
+load_css()
+
+
+# ---------------------------------------------------
+# Session State
+# ---------------------------------------------------
+
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = None
 
@@ -28,153 +53,188 @@ if "document_name" not in st.session_state:
 if "chunk_count" not in st.session_state:
     st.session_state.chunk_count = 0
 
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
 
 # ---------------------------------------------------
 # Sidebar
 # ---------------------------------------------------
+
 with st.sidebar:
 
-    st.title("📂 Upload Documents")
+    st.title("📂 Documents")
 
     uploaded_files = st.file_uploader(
-        "Choose PDF file(s)",
+        "Upload a PDF",
         type=["pdf"],
-        accept_multiple_files=True
+        accept_multiple_files=False
     )
 
     st.markdown("---")
 
-    st.info("Supported Format: PDF")
-
-    # Document information
     if st.session_state.vector_store:
 
-        st.markdown("### 📊 Document Information")
+        st.markdown("### 📄 Current Document")
 
-        st.write(
-            f"**Document:** "
-            f"{st.session_state.document_name}"
+        st.markdown(
+            f"""
+            <div class="document-card">
+                <strong>📄 {st.session_state.document_name}</strong>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-        st.write(
-            f"**Chunks:** "
-            f"{st.session_state.chunk_count}"
-        )
+        col1, col2 = st.columns(2)
 
-        if st.button("🗑️ Clear Document"):
+        with col1:
+            st.metric(
+                "Chunks",
+                st.session_state.chunk_count
+            )
+
+        with col2:
+            st.metric(
+                "Status",
+                "Ready"
+            )
+
+        st.markdown("---")
+
+        if st.button(
+            "🗑️ Clear Document",
+            use_container_width=True
+        ):
 
             st.session_state.vector_store = None
             st.session_state.document_name = None
             st.session_state.chunk_count = 0
+            st.session_state.chat_history = []
 
             st.rerun()
 
+    else:
+
+        st.info(
+            "Upload a PDF to start asking questions."
+        )
+
 
 # ---------------------------------------------------
-# Main Page
+# Main Header
 # ---------------------------------------------------
+
 st.title("📄 DocuMind AI")
 
-st.subheader(
-    "Intelligent Document Question Answering System"
+st.caption(
+    "Chat with your documents using AI-powered semantic search and RAG."
 )
-
-st.write(
-    """
-    Upload a PDF document and ask questions about its
-    contents. DocuMind AI uses semantic search and
-    generative AI to find and explain relevant information.
-    """
-)
-
-st.markdown("---")
 
 
 # ---------------------------------------------------
-# Process Uploaded Documents
+# Process Document
 # ---------------------------------------------------
+
 if uploaded_files:
 
-    # Currently we process the first document.
-    # Multi-document retrieval will be added later.
-    file = uploaded_files[0]
+    file = uploaded_files
 
-    # Only process if this is a new document
     if (
         st.session_state.document_name != file.name
         or st.session_state.vector_store is None
     ):
 
-        with st.spinner("📚 Processing document..."):
+        with st.spinner(
+            "📚 Processing your document..."
+        ):
 
-            # -----------------------------------------
-            # Extract Text
-            # -----------------------------------------
-            text = extract_text_from_pdf(file)
+            try:
 
-            if not text.strip():
+                # Extract text
+                text = extract_text_from_pdf(file)
+
+                if not text.strip():
+
+                    st.error(
+                        "❌ No readable text was found in this PDF."
+                    )
+
+                    st.stop()
+
+                # Split text
+                chunks = split_text(text)
+
+                if not chunks:
+
+                    st.error(
+                        "❌ Could not create document chunks."
+                    )
+
+                    st.stop()
+
+                # Create FAISS vector store
+                vector_store = create_vector_store(
+                    chunks
+                )
+
+                # Save to session state
+                st.session_state.vector_store = vector_store
+                st.session_state.document_name = file.name
+                st.session_state.chunk_count = len(chunks)
+                st.session_state.chat_history = []
+
+                st.success(
+                    "✅ Document processed successfully!"
+                )
+
+            except Exception as e:
 
                 st.error(
-                    "❌ No text could be extracted from this PDF."
+                    f"❌ Error processing document: {e}"
                 )
 
                 st.stop()
 
-            # -----------------------------------------
-            # Split Text
-            # -----------------------------------------
-            chunks = split_text(text)
-
-            # -----------------------------------------
-            # Create FAISS Vector Store
-            # -----------------------------------------
-            vector_store = create_vector_store(chunks)
-
-            # -----------------------------------------
-            # Save to Session State
-            # -----------------------------------------
-            st.session_state.vector_store = vector_store
-            st.session_state.document_name = file.name
-            st.session_state.chunk_count = len(chunks)
-
-        st.success(
-            f"✅ {file.name} processed successfully!"
-        )
-
 
 # ---------------------------------------------------
-# Document Status
+# Main Q&A Interface
 # ---------------------------------------------------
+
 if st.session_state.vector_store:
-
-    st.markdown("### 📄 Current Document")
-
-    st.success(
-        f"**{st.session_state.document_name}** "
-        f"• {st.session_state.chunk_count} chunks indexed"
-    )
 
     st.markdown("---")
 
-    # ------------------------------------------------
-    # Question Answering
-    # ------------------------------------------------
     st.header("💬 Ask Your Document")
 
     question = st.text_input(
-        "Ask a question",
-        placeholder="Example: What are the main findings?"
+        "Your question",
+        placeholder=(
+            "Example: What are the main findings "
+            "of this document?"
+        ),
+        label_visibility="collapsed"
     )
 
-    if st.button("🔍 Ask DocuMind"):
+    ask_button = st.button(
+        "🔍 Ask DocuMind",
+        type="primary",
+        use_container_width=True
+    )
+
+    if ask_button:
 
         if not question.strip():
 
-            st.warning("Please enter a question.")
+            st.warning(
+                "Please enter a question first."
+            )
 
         else:
 
-            with st.spinner("🤔 Searching the document..."):
+            with st.spinner(
+                "🤔 Searching the document..."
+            ):
 
                 try:
 
@@ -183,33 +243,86 @@ if st.session_state.vector_store:
                         question
                     )
 
-                    st.markdown("### 🤖 Answer")
-
-                    st.write(answer)
-
-                    # --------------------------------
-                    # Retrieved Sources
-                    # --------------------------------
-                    st.markdown("### 📚 Retrieved Sources")
-
-                    for i, doc in enumerate(docs):
-
-                        with st.expander(
-                            f"Source {i + 1}"
-                        ):
-
-                            st.write(
-                                doc.page_content
-                            )
+                    # Save conversation
+                    st.session_state.chat_history.append(
+                        {
+                            "question": question,
+                            "answer": answer,
+                            "docs": docs
+                        }
+                    )
 
                 except Exception as e:
 
                     st.error(
-                        f"❌ Something went wrong: {e}"
+                        f"❌ Unable to answer question: {e}"
                     )
+
+
+    # ------------------------------------------------
+    # Conversation History
+    # ------------------------------------------------
+
+    if st.session_state.chat_history:
+
+        st.markdown("---")
+
+        st.header("💬 Conversation")
+
+        for chat in reversed(
+            st.session_state.chat_history
+        ):
+
+            st.markdown(
+                f"**🧑 You:** {chat['question']}"
+            )
+
+            st.markdown(
+                f"""
+                <div class="answer-card">
+                    <strong>🤖 DocuMind AI</strong>
+                    <br><br>
+                    {chat['answer']}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            st.markdown("#### 📚 Sources")
+
+            for i, doc in enumerate(
+                chat["docs"]
+            ):
+
+                with st.expander(
+                    f"Source {i + 1}"
+                ):
+
+                    st.write(
+                        doc.page_content
+                    )
+
+            st.markdown("---")
+
+
+# ---------------------------------------------------
+# Empty State
+# ---------------------------------------------------
 
 else:
 
+    st.markdown("---")
+
+    st.subheader("Get started")
+
+    st.write(
+        """
+        Upload a PDF using the sidebar. Once your document is
+        processed, you can ask questions and DocuMind AI will
+        retrieve the most relevant information from it.
+        """
+    )
+
     st.info(
-        "👈 Upload a PDF from the sidebar to get started."
+        "👈 Upload a PDF from the sidebar to begin."
     )
