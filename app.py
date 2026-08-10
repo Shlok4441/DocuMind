@@ -46,22 +46,15 @@ load_css()
 # ---------------------------------------------------
 
 if "vector_store" not in st.session_state:
-
     st.session_state.vector_store = None
 
-
 if "document_names" not in st.session_state:
-
     st.session_state.document_names = []
 
-
 if "chunk_count" not in st.session_state:
-
     st.session_state.chunk_count = 0
 
-
 if "chat_history" not in st.session_state:
-
     st.session_state.chat_history = []
 
 
@@ -86,7 +79,6 @@ with st.sidebar:
         "to start asking questions."
     )
 
-
     # -----------------------------------------------
     # Current Documents
     # -----------------------------------------------
@@ -101,16 +93,13 @@ with st.sidebar:
                 f"📄 `{document_name}`"
             )
 
-
         st.markdown("---")
-
 
         # -------------------------------------------
         # Document Statistics
         # -------------------------------------------
 
         col1, col2 = st.columns(2)
-
 
         with col1:
 
@@ -119,7 +108,6 @@ with st.sidebar:
                 len(st.session_state.document_names)
             )
 
-
         with col2:
 
             st.metric(
@@ -127,9 +115,7 @@ with st.sidebar:
                 st.session_state.chunk_count
             )
 
-
         st.markdown("---")
-
 
         # -------------------------------------------
         # Clear Documents
@@ -141,11 +127,8 @@ with st.sidebar:
         ):
 
             st.session_state.vector_store = None
-
             st.session_state.document_names = []
-
             st.session_state.chunk_count = 0
-
             st.session_state.chat_history = []
 
             st.rerun()
@@ -161,7 +144,6 @@ st.caption(
     "Chat with your documents using AI-powered "
     "semantic search and RAG."
 )
-
 
 st.markdown("---")
 
@@ -179,9 +161,8 @@ if uploaded_files:
         for file in uploaded_files
     ]
 
-
     # -----------------------------------------------
-    # Check whether we need to process documents
+    # Check whether documents need processing
     # -----------------------------------------------
 
     if (
@@ -202,7 +183,6 @@ if uploaded_files:
 
                 all_documents = []
 
-
                 for file in uploaded_files:
 
                     documents = extract_documents_from_pdf(
@@ -212,7 +192,6 @@ if uploaded_files:
                     all_documents.extend(
                         documents
                     )
-
 
                 # -----------------------------------
                 # Check Extracted Documents
@@ -227,7 +206,6 @@ if uploaded_files:
 
                     st.stop()
 
-
                 # -----------------------------------
                 # Split Documents into Chunks
                 # -----------------------------------
@@ -235,7 +213,6 @@ if uploaded_files:
                 chunks = split_documents(
                     all_documents
                 )
-
 
                 if not chunks:
 
@@ -245,7 +222,6 @@ if uploaded_files:
 
                     st.stop()
 
-
                 # -----------------------------------
                 # Create Combined FAISS Vector Store
                 # -----------------------------------
@@ -253,7 +229,6 @@ if uploaded_files:
                 vector_store = create_vector_store(
                     chunks
                 )
-
 
                 # -----------------------------------
                 # Save to Session State
@@ -263,25 +238,20 @@ if uploaded_files:
                     vector_store
                 )
 
-
                 st.session_state.document_names = (
                     current_document_names
                 )
-
 
                 st.session_state.chunk_count = (
                     len(chunks)
                 )
 
-
                 st.session_state.chat_history = []
-
 
                 st.success(
                     f"✅ {len(uploaded_files)} "
                     "document(s) processed successfully!"
                 )
-
 
             except Exception as e:
 
@@ -304,16 +274,13 @@ if st.session_state.vector_store:
         f"{st.session_state.chunk_count} chunks"
     )
 
-
     st.markdown("---")
-
 
     # ------------------------------------------------
     # Question Answering
     # ------------------------------------------------
 
     st.header("💬 Ask Your Documents")
-
 
     question = st.text_input(
         "Your question",
@@ -324,13 +291,11 @@ if st.session_state.vector_store:
         label_visibility="collapsed"
     )
 
-
     ask_button = st.button(
         "🔍 Ask DocuMind",
         type="primary",
         use_container_width=True
     )
-
 
     # ------------------------------------------------
     # Process Question
@@ -352,11 +317,13 @@ if st.session_state.vector_store:
 
                 try:
 
-                    answer, docs = answer_question(
-                        st.session_state.vector_store,
-                        question
+                    answer, docs, search_query = (
+                        answer_question(
+                            st.session_state.vector_store,
+                            question,
+                            st.session_state.chat_history
+                        )
                     )
-
 
                     # --------------------------------
                     # Save Conversation
@@ -366,10 +333,10 @@ if st.session_state.vector_store:
                         {
                             "question": question,
                             "answer": answer,
-                            "docs": docs
+                            "docs": docs,
+                            "search_query": search_query
                         }
                     )
-
 
                 except Exception as e:
 
@@ -388,7 +355,6 @@ if st.session_state.vector_store:
 
         st.header("💬 Conversation")
 
-
         for chat in reversed(
             st.session_state.chat_history
         ):
@@ -400,7 +366,6 @@ if st.session_state.vector_store:
             st.markdown(
                 f"**🧑 You:** {chat['question']}"
             )
-
 
             # ----------------------------------------
             # AI Answer
@@ -414,6 +379,20 @@ if st.session_state.vector_store:
                 chat["answer"]
             )
 
+            # ----------------------------------------
+            # Retrieval Query
+            # ----------------------------------------
+
+            with st.expander(
+                "🔍 Retrieval Query"
+            ):
+
+                st.write(
+                    chat.get(
+                        "search_query",
+                        chat["question"]
+                    )
+                )
 
             # ----------------------------------------
             # Sources
@@ -422,7 +401,6 @@ if st.session_state.vector_store:
             st.markdown(
                 "#### 📚 Sources"
             )
-
 
             for i, doc in enumerate(
                 chat["docs"]
@@ -433,12 +411,10 @@ if st.session_state.vector_store:
                     "Unknown document"
                 )
 
-
                 page = doc.metadata.get(
                     "page",
                     "Unknown"
                 )
-
 
                 with st.expander(
                     f"📄 {source} — Page {page}"
@@ -447,7 +423,6 @@ if st.session_state.vector_store:
                     st.write(
                         doc.page_content
                     )
-
 
             st.markdown("---")
 
@@ -468,7 +443,6 @@ else:
         you to ask questions about their contents.
         """
     )
-
 
     st.info(
         "👈 Upload PDF documents from the sidebar "
