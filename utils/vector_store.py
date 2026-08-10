@@ -6,25 +6,34 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 load_dotenv()
 
+
+# ---------------------------------------------------
+# Google Embedding Model
+# ---------------------------------------------------
+
 embeddings = GoogleGenerativeAIEmbeddings(
     model="models/gemini-embedding-001",
     google_api_key=os.getenv("GOOGLE_API_KEY")
 )
 
 
-def create_vector_store(chunks):
+# ---------------------------------------------------
+# Create Vector Store
+# ---------------------------------------------------
+
+def create_vector_store(documents):
     """
-    Creates a FAISS vector store from text chunks.
+    Creates a FAISS vector store from LangChain documents.
 
-    Args:
-        chunks (list): List of text chunks
+    Each document contains:
+    - page_content
+    - metadata
 
-    Returns:
-        FAISS vector store
+    Metadata allows us to identify the source PDF later.
     """
 
-    vector_store = FAISS.from_texts(
-        texts=chunks,
+    vector_store = FAISS.from_documents(
+        documents=documents,
         embedding=embeddings
     )
 

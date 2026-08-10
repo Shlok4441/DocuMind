@@ -1,15 +1,10 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-def split_text(text):
+def split_documents(documents):
     """
-    Splits extracted text into overlapping chunks.
-
-    Args:
-        text (str): Extracted document text
-
-    Returns:
-        list: List of text chunks
+    Splits documents into smaller chunks while
+    preserving their metadata.
     """
 
     text_splitter = RecursiveCharacterTextSplitter(
@@ -18,6 +13,6 @@ def split_text(text):
         length_function=len
     )
 
-    chunks = text_splitter.split_text(text)
+    chunks = text_splitter.split_documents(documents)
 
     return chunks

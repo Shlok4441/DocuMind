@@ -1,7 +1,7 @@
 import streamlit as st
 
-from utils.pdf_loader import extract_text_from_pdf
-from utils.chunker import split_text
+from utils.pdf_loader import extract_documents_from_pdf
+from utils.chunker import split_documents
 from utils.vector_store import create_vector_store
 from utils.qa_chain import answer_question
 
@@ -27,6 +27,7 @@ def load_css():
     try:
 
         with open("css/style.css") as f:
+
             st.markdown(
                 f"<style>{f.read()}</style>",
                 unsafe_allow_html=True
@@ -45,15 +46,22 @@ load_css()
 # ---------------------------------------------------
 
 if "vector_store" not in st.session_state:
+
     st.session_state.vector_store = None
 
-if "document_name" not in st.session_state:
-    st.session_state.document_name = None
+
+if "document_names" not in st.session_state:
+
+    st.session_state.document_names = []
+
 
 if "chunk_count" not in st.session_state:
+
     st.session_state.chunk_count = 0
 
+
 if "chat_history" not in st.session_state:
+
     st.session_state.chat_history = []
 
 
@@ -66,59 +74,81 @@ with st.sidebar:
     st.title("📂 Documents")
 
     uploaded_files = st.file_uploader(
-        "Upload a PDF",
+        "Upload PDF documents",
         type=["pdf"],
-        accept_multiple_files=False
+        accept_multiple_files=True
     )
 
     st.markdown("---")
 
+    st.info(
+        "Upload one or more PDF documents "
+        "to start asking questions."
+    )
+
+
+    # -----------------------------------------------
+    # Current Documents
+    # -----------------------------------------------
+
     if st.session_state.vector_store:
 
-        st.markdown("### 📄 Current Document")
+        st.markdown("### 📄 Current Documents")
 
-        st.markdown(
-            f"""
-            <div class="document-card">
-                <strong>📄 {st.session_state.document_name}</strong>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        for document_name in st.session_state.document_names:
+
+            st.markdown(
+                f"📄 `{document_name}`"
+            )
+
+
+        st.markdown("---")
+
+
+        # -------------------------------------------
+        # Document Statistics
+        # -------------------------------------------
 
         col1, col2 = st.columns(2)
 
+
         with col1:
+
+            st.metric(
+                "Documents",
+                len(st.session_state.document_names)
+            )
+
+
+        with col2:
+
             st.metric(
                 "Chunks",
                 st.session_state.chunk_count
             )
 
-        with col2:
-            st.metric(
-                "Status",
-                "Ready"
-            )
 
         st.markdown("---")
 
+
+        # -------------------------------------------
+        # Clear Documents
+        # -------------------------------------------
+
         if st.button(
-            "🗑️ Clear Document",
+            "🗑️ Clear Documents",
             use_container_width=True
         ):
 
             st.session_state.vector_store = None
-            st.session_state.document_name = None
+
+            st.session_state.document_names = []
+
             st.session_state.chunk_count = 0
+
             st.session_state.chat_history = []
 
             st.rerun()
-
-    else:
-
-        st.info(
-            "Upload a PDF to start asking questions."
-        )
 
 
 # ---------------------------------------------------
@@ -128,42 +158,84 @@ with st.sidebar:
 st.title("📄 DocuMind AI")
 
 st.caption(
-    "Chat with your documents using AI-powered semantic search and RAG."
+    "Chat with your documents using AI-powered "
+    "semantic search and RAG."
 )
 
 
+st.markdown("---")
+
+
 # ---------------------------------------------------
-# Process Document
+# Process Uploaded Documents
 # ---------------------------------------------------
 
 if uploaded_files:
 
-    file = uploaded_files
+    # Get filenames of currently uploaded documents
+
+    current_document_names = [
+        file.name
+        for file in uploaded_files
+    ]
+
+
+    # -----------------------------------------------
+    # Check whether we need to process documents
+    # -----------------------------------------------
 
     if (
-        st.session_state.document_name != file.name
+        current_document_names
+        != st.session_state.document_names
         or st.session_state.vector_store is None
     ):
 
         with st.spinner(
-            "📚 Processing your document..."
+            "📚 Processing your documents..."
         ):
 
             try:
 
-                # Extract text
-                text = extract_text_from_pdf(file)
+                # -----------------------------------
+                # Extract Documents
+                # -----------------------------------
 
-                if not text.strip():
+                all_documents = []
+
+
+                for file in uploaded_files:
+
+                    documents = extract_documents_from_pdf(
+                        file
+                    )
+
+                    all_documents.extend(
+                        documents
+                    )
+
+
+                # -----------------------------------
+                # Check Extracted Documents
+                # -----------------------------------
+
+                if not all_documents:
 
                     st.error(
-                        "❌ No readable text was found in this PDF."
+                        "❌ No readable text was found "
+                        "in the uploaded PDFs."
                     )
 
                     st.stop()
 
-                # Split text
-                chunks = split_text(text)
+
+                # -----------------------------------
+                # Split Documents into Chunks
+                # -----------------------------------
+
+                chunks = split_documents(
+                    all_documents
+                )
+
 
                 if not chunks:
 
@@ -173,54 +245,96 @@ if uploaded_files:
 
                     st.stop()
 
-                # Create FAISS vector store
+
+                # -----------------------------------
+                # Create Combined FAISS Vector Store
+                # -----------------------------------
+
                 vector_store = create_vector_store(
                     chunks
                 )
 
-                # Save to session state
-                st.session_state.vector_store = vector_store
-                st.session_state.document_name = file.name
-                st.session_state.chunk_count = len(chunks)
+
+                # -----------------------------------
+                # Save to Session State
+                # -----------------------------------
+
+                st.session_state.vector_store = (
+                    vector_store
+                )
+
+
+                st.session_state.document_names = (
+                    current_document_names
+                )
+
+
+                st.session_state.chunk_count = (
+                    len(chunks)
+                )
+
+
                 st.session_state.chat_history = []
 
+
                 st.success(
-                    "✅ Document processed successfully!"
+                    f"✅ {len(uploaded_files)} "
+                    "document(s) processed successfully!"
                 )
+
 
             except Exception as e:
 
                 st.error(
-                    f"❌ Error processing document: {e}"
+                    f"❌ Error processing documents: {e}"
                 )
 
                 st.stop()
 
 
 # ---------------------------------------------------
-# Main Q&A Interface
+# Document Status
 # ---------------------------------------------------
 
 if st.session_state.vector_store:
 
+    st.success(
+        f"📚 {len(st.session_state.document_names)} "
+        f"document(s) indexed • "
+        f"{st.session_state.chunk_count} chunks"
+    )
+
+
     st.markdown("---")
 
-    st.header("💬 Ask Your Document")
+
+    # ------------------------------------------------
+    # Question Answering
+    # ------------------------------------------------
+
+    st.header("💬 Ask Your Documents")
+
 
     question = st.text_input(
         "Your question",
         placeholder=(
             "Example: What are the main findings "
-            "of this document?"
+            "of these documents?"
         ),
         label_visibility="collapsed"
     )
+
 
     ask_button = st.button(
         "🔍 Ask DocuMind",
         type="primary",
         use_container_width=True
     )
+
+
+    # ------------------------------------------------
+    # Process Question
+    # ------------------------------------------------
 
     if ask_button:
 
@@ -233,7 +347,7 @@ if st.session_state.vector_store:
         else:
 
             with st.spinner(
-                "🤔 Searching the document..."
+                "🤔 Searching your documents..."
             ):
 
                 try:
@@ -243,7 +357,11 @@ if st.session_state.vector_store:
                         question
                     )
 
-                    # Save conversation
+
+                    # --------------------------------
+                    # Save Conversation
+                    # --------------------------------
+
                     st.session_state.chat_history.append(
                         {
                             "question": question,
@@ -251,6 +369,7 @@ if st.session_state.vector_store:
                             "docs": docs
                         }
                     )
+
 
                 except Exception as e:
 
@@ -269,38 +388,66 @@ if st.session_state.vector_store:
 
         st.header("💬 Conversation")
 
+
         for chat in reversed(
             st.session_state.chat_history
         ):
+
+            # ----------------------------------------
+            # User Question
+            # ----------------------------------------
 
             st.markdown(
                 f"**🧑 You:** {chat['question']}"
             )
 
+
+            # ----------------------------------------
+            # AI Answer
+            # ----------------------------------------
+
             st.markdown(
-                f"""
-                <div class="answer-card">
-                    <strong>🤖 DocuMind AI</strong>
-                    <br><br>
-                    {chat['answer']}
-                </div>
-                """,
-                unsafe_allow_html=True
+                "#### 🤖 DocuMind AI"
             )
 
-            st.markdown("#### 📚 Sources")
+            st.write(
+                chat["answer"]
+            )
+
+
+            # ----------------------------------------
+            # Sources
+            # ----------------------------------------
+
+            st.markdown(
+                "#### 📚 Sources"
+            )
+
 
             for i, doc in enumerate(
                 chat["docs"]
             ):
 
+                source = doc.metadata.get(
+                    "source",
+                    "Unknown document"
+                )
+
+
+                page = doc.metadata.get(
+                    "page",
+                    "Unknown"
+                )
+
+
                 with st.expander(
-                    f"Source {i + 1}"
+                    f"📄 {source} — Page {page}"
                 ):
 
                     st.write(
                         doc.page_content
                     )
+
 
             st.markdown("---")
 
@@ -311,18 +458,19 @@ if st.session_state.vector_store:
 
 else:
 
-    st.markdown("---")
-
     st.subheader("Get started")
 
     st.write(
         """
-        Upload a PDF using the sidebar. Once your document is
-        processed, you can ask questions and DocuMind AI will
-        retrieve the most relevant information from it.
+        Upload one or more PDF documents using the
+        sidebar. DocuMind AI will process the documents,
+        create a searchable knowledge base, and allow
+        you to ask questions about their contents.
         """
     )
 
+
     st.info(
-        "👈 Upload a PDF from the sidebar to begin."
+        "👈 Upload PDF documents from the sidebar "
+        "to begin."
     )

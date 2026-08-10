@@ -1,26 +1,34 @@
 from pypdf import PdfReader
+from langchain_core.documents import Document
 
 
-def extract_text_from_pdf(uploaded_file):
+def extract_documents_from_pdf(uploaded_file):
     """
-    Extracts text from an uploaded PDF file.
-
-    Args:
-        uploaded_file: Streamlit UploadedFile object
+    Extract text from each PDF page and preserve
+    document/page metadata.
 
     Returns:
-        str: Combined text from all pages
+        list[Document]
     """
 
     reader = PdfReader(uploaded_file)
 
-    text = ""
+    documents = []
 
-    for page in reader.pages:
+    for page_number, page in enumerate(reader.pages, start=1):
 
         page_text = page.extract_text()
 
-        if page_text:
-            text += page_text + "\n"
+        if page_text and page_text.strip():
 
-    return text
+            document = Document(
+                page_content=page_text,
+                metadata={
+                    "source": uploaded_file.name,
+                    "page": page_number
+                }
+            )
+
+            documents.append(document)
+
+    return documents

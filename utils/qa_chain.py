@@ -4,24 +4,39 @@ from utils.llm import generate_answer
 
 def answer_question(vector_store, question):
     """
-    Retrieve relevant chunks and generate an answer.
-
-    Args:
-        vector_store: FAISS vector store
-        question (str): User question
-
-    Returns:
-        tuple: (answer, retrieved_chunks)
+    Retrieve relevant document chunks and generate
+    an answer using Gemini.
     """
 
     docs = vector_store.similarity_search(
         question,
-        k=3
+        k=4
     )
 
-    context = "\n\n".join(
-        doc.page_content for doc in docs
-    )
+    context_parts = []
+
+    for doc in docs:
+
+        source = doc.metadata.get(
+            "source",
+            "Unknown document"
+        )
+
+        page = doc.metadata.get(
+            "page",
+            "Unknown"
+        )
+
+        context_parts.append(
+            f"""
+Source: {source}
+Page: {page}
+
+{doc.page_content}
+"""
+        )
+
+    context = "\n\n".join(context_parts)
 
     prompt = SYSTEM_PROMPT.format(
         context=context,
