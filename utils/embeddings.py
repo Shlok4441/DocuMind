@@ -1,36 +1,49 @@
-from dotenv import load_dotenv
-from google import genai
-import os
-
-# Load environment variables
-load_dotenv()
-
-# Create Gemini client
-client = genai.Client(
-    api_key=os.getenv("GOOGLE_API_KEY")
-)
+from sentence_transformers import SentenceTransformer
+from langchain_core.embeddings import Embeddings
 
 
-def generate_embeddings(chunks):
-    """
-    Generate embeddings for a list of text chunks.
+class LocalEmbeddings(Embeddings):
 
-    Args:
-        chunks (list): List of text chunks
+    def __init__(self, model_name="all-MiniLM-L6-v2"):
+        print("Loading local embedding model...")
+        self.model = SentenceTransformer(model_name)
+        print("Local embedding model loaded.")
 
-    Returns:
-        list: List of embeddings
-    """
+    # ------------------------------------------------
+    # Embed Documents
+    # ------------------------------------------------
 
-    embeddings = []
+    def embed_documents(self, texts):
 
-    for chunk in chunks:
+        if not texts:
+            return []
 
-        response = client.models.embed_content(
-            model="gemini-embedding-001",
-            contents=chunk
+        embeddings = self.model.encode(
+            texts,
+            normalize_embeddings=True,
+            show_progress_bar=False
         )
 
-        embeddings.append(response.embeddings[0].values)
+        return embeddings.tolist()
 
-    return embeddings
+    # ------------------------------------------------
+    # Embed Query
+    # ------------------------------------------------
+
+    def embed_query(self, text):
+
+        embedding = self.model.encode(
+            text,
+            normalize_embeddings=True
+        )
+
+        return embedding.tolist()
+
+
+# ----------------------------------------------------
+# Embedding Model
+# ----------------------------------------------------
+
+embeddings = LocalEmbeddings(
+    model_name="all-MiniLM-L6-v2"
+)

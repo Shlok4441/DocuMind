@@ -1,70 +1,58 @@
 import streamlit as st
 
-from utils.pdf_loader import extract_documents_from_pdf
-from utils.chunker import split_documents
-from utils.vector_store import create_vector_store
+from utils.pdf_loader import extract_text_from_pdf
+from utils.chunker import split_text
+
+from utils.vector_store import (
+    load_vector_store,
+    create_vector_store,
+    add_documents_to_vector_store,
+    save_vector_store
+)
+
+from utils.document_registry import (
+    calculate_file_hash,
+    document_exists,
+    register_document,
+    get_registered_documents
+)
+
 from utils.qa_chain import answer_question
 
+from langchain_core.documents import Document
 
-# ---------------------------------------------------
-# Page Configuration
-# ---------------------------------------------------
+
+# ============================================================
+# PAGE CONFIGURATION
+# ============================================================
 
 st.set_page_config(
     page_title="DocuMind AI",
     page_icon="📄",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 
-# ---------------------------------------------------
-# Load Custom CSS
-# ---------------------------------------------------
-
-def load_css():
-
-    try:
-
-        with open("css/style.css") as f:
-
-            st.markdown(
-                f"<style>{f.read()}</style>",
-                unsafe_allow_html=True
-            )
-
-    except FileNotFoundError:
-
-        pass
-
-
-load_css()
-
-
-# ---------------------------------------------------
-# Session State
-# ---------------------------------------------------
-
-if "vector_store" not in st.session_state:
-    st.session_state.vector_store = None
-
-if "document_names" not in st.session_state:
-    st.session_state.document_names = []
-
-if "chunk_count" not in st.session_state:
-    st.session_state.chunk_count = 0
+# ============================================================
+# SESSION STATE
+# ============================================================
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+if "vector_store" not in st.session_state:
+    st.session_state.vector_store = load_vector_store()
 
-# ---------------------------------------------------
-# Sidebar
-# ---------------------------------------------------
+
+# ============================================================
+# SIDEBAR
+# ============================================================
 
 with st.sidebar:
 
     st.title("📂 Documents")
+
+    st.markdown("### Upload PDF documents")
 
     uploaded_files = st.file_uploader(
         "Upload PDF documents",
@@ -79,372 +67,502 @@ with st.sidebar:
         "to start asking questions."
     )
 
-    # -----------------------------------------------
+    # --------------------------------------------------------
     # Current Documents
-    # -----------------------------------------------
+    # --------------------------------------------------------
 
-    if st.session_state.vector_store:
+    registry = get_registered_documents()
+
+    if registry:
 
         st.markdown("### 📄 Current Documents")
 
-        for document_name in st.session_state.document_names:
+        for item in registry.values():
 
-            st.markdown(
-                f"📄 `{document_name}`"
+            st.caption(
+                f"📄 {item.get('filename', 'Unknown')}"
             )
 
-        st.markdown("---")
+    # --------------------------------------------------------
+    # Statistics
+    # --------------------------------------------------------
 
-        # -------------------------------------------
-        # Document Statistics
-        # -------------------------------------------
+    total_documents = len(registry)
 
-        col1, col2 = st.columns(2)
+    total_chunks = sum(
+        item.get("chunks", 0)
+        for item in registry.values()
+    )
 
-        with col1:
+    st.markdown("---")
 
-            st.metric(
-                "Documents",
-                len(st.session_state.document_names)
-            )
+    col1, col2 = st.columns(2)
 
-        with col2:
+    with col1:
 
-            st.metric(
-                "Chunks",
-                st.session_state.chunk_count
-            )
+        st.metric(
+            "Documents",
+            total_documents
+        )
 
-        st.markdown("---")
+    with col2:
 
-        # -------------------------------------------
-        # Clear Documents
-        # -------------------------------------------
-
-        if st.button(
-            "🗑️ Clear Documents",
-            use_container_width=True
-        ):
-
-            st.session_state.vector_store = None
-            st.session_state.document_names = []
-            st.session_state.chunk_count = 0
-            st.session_state.chat_history = []
-
-            st.rerun()
+        st.metric(
+            "Chunks",
+            total_chunks
+        )
 
 
-# ---------------------------------------------------
-# Main Header
-# ---------------------------------------------------
+# ============================================================
+# MAIN PAGE
+# ============================================================
 
 st.title("📄 DocuMind AI")
 
-st.caption(
-    "Chat with your documents using AI-powered "
-    "semantic search and RAG."
+st.write(
+    "Chat with your documents using "
+    "AI-powered semantic search and RAG."
 )
 
-st.markdown("---")
 
-
-# ---------------------------------------------------
-# Process Uploaded Documents
-# ---------------------------------------------------
+# ============================================================
+# PROCESS UPLOADED DOCUMENTS
+# ============================================================
 
 if uploaded_files:
 
-    # Get filenames of currently uploaded documents
+    new_documents = []
 
-    current_document_names = [
-        file.name
-        for file in uploaded_files
-    ]
+    documents_to_register = []
 
-    # -----------------------------------------------
-    # Check whether documents need processing
-    # -----------------------------------------------
+    skipped_documents = []
 
-    if (
-        current_document_names
-        != st.session_state.document_names
-        or st.session_state.vector_store is None
-    ):
+    processed_documents = []
 
-        with st.spinner(
-            "📚 Processing your documents..."
-        ):
+    # --------------------------------------------------------
+    # Process files
+    # --------------------------------------------------------
+
+    with st.spinner("Processing new documents..."):
+
+        for uploaded_file in uploaded_files:
 
             try:
 
-                # -----------------------------------
-                # Extract Documents
-                # -----------------------------------
+                # ------------------------------------------------
+                # Read PDF bytes
+                # ------------------------------------------------
 
-                all_documents = []
+                file_bytes = uploaded_file.getvalue()
 
-                for file in uploaded_files:
+                # ------------------------------------------------
+                # Calculate unique document hash
+                # ------------------------------------------------
 
-                    documents = extract_documents_from_pdf(
-                        file
+                file_hash = calculate_file_hash(
+                    file_bytes
+                )
+
+                # ------------------------------------------------
+                # Check whether already indexed
+                # ------------------------------------------------
+
+                if document_exists(file_hash):
+
+                    skipped_documents.append(
+                        uploaded_file.name
                     )
 
-                    all_documents.extend(
-                        documents
+                    continue
+
+                # ------------------------------------------------
+                # Extract text WITH page information
+                # ------------------------------------------------
+
+                pages = extract_text_from_pdf(
+                    uploaded_file
+                )
+
+                if not pages:
+
+                    st.warning(
+                        f"⚠️ Could not extract text "
+                        f"from {uploaded_file.name}."
                     )
 
-                # -----------------------------------
-                # Check Extracted Documents
-                # -----------------------------------
+                    continue
 
-                if not all_documents:
+                # ------------------------------------------------
+                # Split into chunks WITH page information
+                # ------------------------------------------------
 
-                    st.error(
-                        "❌ No readable text was found "
-                        "in the uploaded PDFs."
-                    )
-
-                    st.stop()
-
-                # -----------------------------------
-                # Split Documents into Chunks
-                # -----------------------------------
-
-                chunks = split_documents(
-                    all_documents
+                chunks = split_text(
+                    pages
                 )
 
                 if not chunks:
 
-                    st.error(
-                        "❌ Could not create document chunks."
+                    st.warning(
+                        f"⚠️ No chunks created for "
+                        f"{uploaded_file.name}."
                     )
 
-                    st.stop()
+                    continue
 
-                # -----------------------------------
-                # Create Combined FAISS Vector Store
-                # -----------------------------------
+                # ------------------------------------------------
+                # Convert chunks to LangChain Documents
+                # ------------------------------------------------
 
-                vector_store = create_vector_store(
-                    chunks
+                documents = []
+
+                for index, chunk in enumerate(chunks):
+
+                    documents.append(
+
+                        Document(
+
+                            page_content=chunk["text"],
+
+                            metadata={
+
+                                "source":
+                                    uploaded_file.name,
+
+                                "page":
+                                    chunk["page"],
+
+                                "chunk":
+                                    index + 1,
+
+                                "file_hash":
+                                    file_hash
+
+                            }
+
+                        )
+
+                    )
+
+                # ------------------------------------------------
+                # Add documents to processing list
+                # ------------------------------------------------
+
+                new_documents.extend(
+                    documents
                 )
 
-                # -----------------------------------
-                # Save to Session State
-                # -----------------------------------
+                # ------------------------------------------------
+                # Prepare registry information
+                # ------------------------------------------------
 
-                st.session_state.vector_store = (
-                    vector_store
-                )
+                documents_to_register.append({
 
-                st.session_state.document_names = (
-                    current_document_names
-                )
+                    "hash":
+                        file_hash,
 
-                st.session_state.chunk_count = (
-                    len(chunks)
-                )
+                    "filename":
+                        uploaded_file.name,
 
-                st.session_state.chat_history = []
+                    "chunks":
+                        len(documents)
 
-                st.success(
-                    f"✅ {len(uploaded_files)} "
-                    "document(s) processed successfully!"
+                })
+
+                processed_documents.append(
+                    uploaded_file.name
                 )
 
             except Exception as e:
 
                 st.error(
-                    f"❌ Error processing documents: {e}"
+                    f"❌ Error reading "
+                    f"{uploaded_file.name}: {e}"
                 )
 
-                st.stop()
 
+    # ========================================================
+    # CREATE / UPDATE VECTOR STORE
+    # ========================================================
 
-# ---------------------------------------------------
-# Document Status
-# ---------------------------------------------------
+    if new_documents:
 
-if st.session_state.vector_store:
-
-    st.success(
-        f"📚 {len(st.session_state.document_names)} "
-        f"document(s) indexed • "
-        f"{st.session_state.chunk_count} chunks"
-    )
-
-    st.markdown("---")
-
-    # ------------------------------------------------
-    # Question Answering
-    # ------------------------------------------------
-
-    st.header("💬 Ask Your Documents")
-
-    question = st.text_input(
-        "Your question",
-        placeholder=(
-            "Example: What are the main findings "
-            "of these documents?"
-        ),
-        label_visibility="collapsed"
-    )
-
-    ask_button = st.button(
-        "🔍 Ask DocuMind",
-        type="primary",
-        use_container_width=True
-    )
-
-    # ------------------------------------------------
-    # Process Question
-    # ------------------------------------------------
-
-    if ask_button:
-
-        if not question.strip():
-
-            st.warning(
-                "Please enter a question first."
-            )
-
-        else:
+        try:
 
             with st.spinner(
-                "🤔 Searching your documents..."
+                "Creating vector embeddings..."
             ):
 
-                try:
+                # ------------------------------------------------
+                # Existing FAISS store
+                # ------------------------------------------------
 
-                    answer, docs, search_query = (
-                        answer_question(
+                if (
+                    st.session_state.vector_store
+                    is not None
+                ):
+
+                    st.session_state.vector_store = (
+                        add_documents_to_vector_store(
                             st.session_state.vector_store,
-                            question,
-                            st.session_state.chat_history
+                            new_documents
                         )
                     )
 
-                    # --------------------------------
-                    # Save Conversation
-                    # --------------------------------
+                # ------------------------------------------------
+                # First vector store
+                # ------------------------------------------------
 
-                    st.session_state.chat_history.append(
-                        {
-                            "question": question,
-                            "answer": answer,
-                            "docs": docs,
-                            "search_query": search_query
-                        }
+                else:
+
+                    st.session_state.vector_store = (
+                        create_vector_store(
+                            new_documents
+                        )
                     )
 
-                except Exception as e:
+                # ------------------------------------------------
+                # Save FAISS
+                # ------------------------------------------------
 
-                    st.error(
-                        f"❌ Unable to answer question: {e}"
-                    )
-
-
-    # ------------------------------------------------
-    # Conversation History
-    # ------------------------------------------------
-
-    if st.session_state.chat_history:
-
-        st.markdown("---")
-
-        st.header("💬 Conversation")
-
-        for chat in reversed(
-            st.session_state.chat_history
-        ):
-
-            # ----------------------------------------
-            # User Question
-            # ----------------------------------------
-
-            st.markdown(
-                f"**🧑 You:** {chat['question']}"
-            )
-
-            # ----------------------------------------
-            # AI Answer
-            # ----------------------------------------
-
-            st.markdown(
-                "#### 🤖 DocuMind AI"
-            )
-
-            st.write(
-                chat["answer"]
-            )
-
-            # ----------------------------------------
-            # Retrieval Query
-            # ----------------------------------------
-
-            with st.expander(
-                "🔍 Retrieval Query"
-            ):
-
-                st.write(
-                    chat.get(
-                        "search_query",
-                        chat["question"]
-                    )
+                save_vector_store(
+                    st.session_state.vector_store
                 )
 
-            # ----------------------------------------
-            # Sources
-            # ----------------------------------------
 
-            st.markdown(
-                "#### 📚 Sources"
+            # ====================================================
+            # REGISTER DOCUMENTS
+            # ====================================================
+
+            for item in documents_to_register:
+
+                register_document(
+
+                    item["hash"],
+
+                    item["filename"],
+
+                    item["chunks"]
+
+                )
+
+
+            st.success(
+                f"✅ {len(processed_documents)} "
+                f"document(s) processed successfully!"
             )
 
-            for i, doc in enumerate(
-                chat["docs"]
-            ):
+            st.success(
+                f"📚 {len(new_documents)} "
+                f"chunks indexed."
+            )
 
-                source = doc.metadata.get(
+        except Exception as e:
+
+            st.error(
+                f"❌ Error processing documents: {e}"
+            )
+
+
+    # ========================================================
+    # DUPLICATE DOCUMENT MESSAGE
+    # ========================================================
+
+    if skipped_documents:
+
+        for filename in skipped_documents:
+
+            st.info(
+                f"ℹ️ **{filename}** is already indexed. "
+                f"Skipped embedding."
+            )
+
+
+# ============================================================
+# REFRESH REGISTRY / STATISTICS
+# ============================================================
+
+registry = get_registered_documents()
+
+total_documents = len(registry)
+
+total_chunks = sum(
+    item.get("chunks", 0)
+    for item in registry.values()
+)
+
+
+# ============================================================
+# STATUS
+# ============================================================
+
+if total_documents > 0:
+
+    st.success(
+        f"📚 {total_documents} document(s) indexed "
+        f"• {total_chunks} chunks"
+    )
+
+
+# ============================================================
+# CHAT SECTION
+# ============================================================
+
+st.markdown("---")
+
+st.header("💬 Chat with Your Documents")
+
+
+# ============================================================
+# DISPLAY CHAT HISTORY
+# ============================================================
+
+for message in st.session_state.chat_history:
+
+    if message["role"] == "user":
+
+        st.markdown(
+            f"**👤 You:** {message['content']}"
+        )
+
+    else:
+
+        st.markdown(
+            f"**🤖 DocuMind:** {message['content']}"
+        )
+
+        # ------------------------------------------------
+        # Sources
+        # ------------------------------------------------
+
+        if message.get("sources"):
+
+            st.markdown("### 📚 Sources")
+
+            for source in message["sources"]:
+
+                filename = source.metadata.get(
                     "source",
                     "Unknown document"
                 )
 
-                page = doc.metadata.get(
+                page = source.metadata.get(
                     "page",
                     "Unknown"
                 )
 
+                chunk = source.metadata.get(
+                    "chunk",
+                    "Unknown"
+                )
+
                 with st.expander(
-                    f"📄 {source} — Page {page}"
+                    f"📄 {filename} "
+                    f"• Page {page} "
+                    f"• Chunk {chunk}"
                 ):
 
                     st.write(
-                        doc.page_content
+                        source.page_content
                     )
 
-            st.markdown("---")
+
+# ============================================================
+# QUESTION INPUT
+# ============================================================
+
+question = st.chat_input(
+    "Ask a question about your documents..."
+)
 
 
-# ---------------------------------------------------
-# Empty State
-# ---------------------------------------------------
+# ============================================================
+# HANDLE QUESTION
+# ============================================================
 
-else:
+if question:
 
-    st.subheader("Get started")
+    # --------------------------------------------------------
+    # Check vector store
+    # --------------------------------------------------------
 
-    st.write(
-        """
-        Upload one or more PDF documents using the
-        sidebar. DocuMind AI will process the documents,
-        create a searchable knowledge base, and allow
-        you to ask questions about their contents.
-        """
-    )
+    if st.session_state.vector_store is None:
 
-    st.info(
-        "👈 Upload PDF documents from the sidebar "
-        "to begin."
-    )
+        st.warning(
+            "⚠️ Please upload a PDF document "
+            "before asking questions."
+        )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Display user question
+    # --------------------------------------------------------
+
+    st.session_state.chat_history.append({
+
+        "role":
+            "user",
+
+        "content":
+            question
+
+    })
+
+
+    # --------------------------------------------------------
+    # Generate answer
+    # --------------------------------------------------------
+
+    with st.spinner(
+        "🔎 Searching your documents..."
+    ):
+
+        try:
+
+            answer, docs, search_query = (
+                answer_question(
+
+                    st.session_state.vector_store,
+
+                    question,
+
+                    st.session_state.chat_history[:-1]
+
+                )
+            )
+
+
+            # ------------------------------------------------
+            # Save assistant response
+            # ------------------------------------------------
+
+            st.session_state.chat_history.append({
+
+                "role":
+                    "assistant",
+
+                "content":
+                    answer,
+
+                "sources":
+                    docs,
+
+                "search_query":
+                    search_query
+
+            })
+
+
+            # ------------------------------------------------
+            # Rerun to display clean chat
+            # ------------------------------------------------
+
+            st.rerun()
+
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Unable to answer question: {e}"
+            )

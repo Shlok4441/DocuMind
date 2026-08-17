@@ -7,20 +7,45 @@ def rewrite_query(question, chat_history):
     question using previous conversation context.
     """
 
+    # ------------------------------------------------
+    # No previous conversation
+    # ------------------------------------------------
+
     if not chat_history:
         return question
+
+
+    # ------------------------------------------------
+    # Build conversation
+    # ------------------------------------------------
 
     conversation = ""
 
     # Use the most recent conversations
-    recent_history = chat_history[-5:]
+    recent_history = chat_history[-10:]
+
 
     for chat in recent_history:
 
-        conversation += (
-            f"User: {chat['question']}\n"
-            f"Assistant: {chat['answer']}\n\n"
-        )
+        role = chat.get("role")
+        content = chat.get("content", "")
+
+        if role == "user":
+
+            conversation += (
+                f"User: {content}\n"
+            )
+
+        elif role == "assistant":
+
+            conversation += (
+                f"Assistant: {content}\n\n"
+            )
+
+
+    # ------------------------------------------------
+    # Rewrite prompt
+    # ------------------------------------------------
 
     prompt = f"""
 You are a query rewriting assistant for a document
@@ -53,6 +78,14 @@ Latest question:
 Standalone question:
 """
 
-    rewritten_question = generate_answer(prompt)
+
+    # ------------------------------------------------
+    # Generate rewritten query
+    # ------------------------------------------------
+
+    rewritten_question = generate_answer(
+        prompt
+    )
+
 
     return rewritten_question.strip()

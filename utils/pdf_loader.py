@@ -1,19 +1,18 @@
-from pypdf import PdfReader
-from langchain_core.documents import Document
+import PyPDF2
 
 
-def extract_documents_from_pdf(uploaded_file):
+def extract_text_from_pdf(uploaded_file):
     """
-    Extract text from each PDF page and preserve
-    document/page metadata.
+    Extract text from an uploaded PDF while preserving
+    the page number.
 
     Returns:
-        list[Document]
+        list: Each item contains page text and page number.
     """
 
-    reader = PdfReader(uploaded_file)
+    reader = PyPDF2.PdfReader(uploaded_file)
 
-    documents = []
+    pages = []
 
     for page_number, page in enumerate(reader.pages, start=1):
 
@@ -21,14 +20,9 @@ def extract_documents_from_pdf(uploaded_file):
 
         if page_text and page_text.strip():
 
-            document = Document(
-                page_content=page_text,
-                metadata={
-                    "source": uploaded_file.name,
-                    "page": page_number
-                }
-            )
+            pages.append({
+                "text": page_text.strip(),
+                "page": page_number
+            })
 
-            documents.append(document)
-
-    return documents
+    return pages

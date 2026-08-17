@@ -1,6 +1,27 @@
+import re
+
 from utils.prompts import SYSTEM_PROMPT
 from utils.llm import generate_answer
 from utils.query_rewriter import rewrite_query
+
+
+def extract_filename(question):
+    """
+    Detect a PDF filename mentioned in the user's question.
+    Example:
+        'According to 1706.03762v7.pdf, what problem...'
+    """
+
+    match = re.search(
+        r'[\w.\-]+\.pdf',
+        question,
+        re.IGNORECASE
+    )
+
+    if match:
+        return match.group(0)
+
+    return None
 
 
 def answer_question(
@@ -9,40 +30,124 @@ def answer_question(
     chat_history=None
 ):
     """
-    Retrieves relevant document chunks and generates
-    an answer using Gemini.
+    Retrieve relevant document chunks and generate
+    a source-grounded answer using Gemini.
 
-    Supports conversation-aware question rewriting.
+    If the user specifies a PDF filename, retrieval
+    is prioritized toward that document.
     """
+
+    # ------------------------------------------------
+    # Initialize chat history
+    # ------------------------------------------------
 
     if chat_history is None:
         chat_history = []
 
-    # -----------------------------------------------
-    # Rewrite question using conversation history
-    # -----------------------------------------------
+
+    # ------------------------------------------------
+    # Detect requested document
+    # ------------------------------------------------
+
+    target_filename = extract_filename(question)
+
+
+    # ------------------------------------------------
+    # Remove filename from semantic search question
+    # ------------------------------------------------
+
+    semantic_question = question
+
+    if target_filename:
+        semantic_question = re.sub(
+            re.escape(target_filename),
+            "",
+            semantic_question,
+            flags=re.IGNORECASE
+        )
+
+
+    # ------------------------------------------------
+    # Rewrite query
+    # ------------------------------------------------
 
     search_query = rewrite_query(
-        question,
+        semantic_question,
         chat_history
     )
 
-    # -----------------------------------------------
+
+    # ------------------------------------------------
     # Search FAISS
-    # -----------------------------------------------
+    # ------------------------------------------------
+
+    # Retrieve more candidates initially.
+    # This gives us enough candidates to prioritize
+    # the requested PDF.
 
     docs = vector_store.similarity_search(
         search_query,
-        k=4
+        k=20
     )
 
-    # -----------------------------------------------
-    # Build Context
-    # -----------------------------------------------
+
+    # ------------------------------------------------
+    # Prioritize requested document
+    # ------------------------------------------------
+
+    if target_filename:
+
+        target_docs = []
+        other_docs = []
+
+        for doc in docs:
+
+            source = str(
+                doc.metadata.get(
+                    "source",
+                    ""
+                )
+            )
+
+            source_name = source.split("/")[-1]
+
+            if source_name.lower() == target_filename.lower():
+
+                target_docs.append(doc)
+
+            else:
+
+                other_docs.append(doc)
+
+
+        # If matching document chunks were found,
+        # use them first.
+
+        if target_docs:
+
+            docs = target_docs[:6]
+
+        else:
+
+            # Fall back to normal semantic retrieval
+            docs = docs[:6]
+
+    else:
+
+        docs = docs[:6]
+
+
+    # ------------------------------------------------
+    # Build context
+    # ------------------------------------------------
 
     context_parts = []
 
-    for doc in docs:
+
+    for i, doc in enumerate(
+        docs,
+        start=1
+    ):
 
         source = doc.metadata.get(
             "source",
@@ -54,28 +159,48 @@ def answer_question(
             "Unknown"
         )
 
+
         context_parts.append(
             f"""
-Source: {source}
+SOURCE [{i}]
+Document: {source}
 Page: {page}
 
 {doc.page_content}
 """
         )
 
+
     context = "\n\n".join(
         context_parts
     )
 
-    # -----------------------------------------------
-    # Generate Final Answer
-    # -----------------------------------------------
+
+    # ------------------------------------------------
+    # Build RAG prompt
+    # ------------------------------------------------
 
     prompt = SYSTEM_PROMPT.format(
         context=context,
         question=question
     )
 
-    answer = generate_answer(prompt)
 
-    return answer, docs, search_query
+    # ------------------------------------------------
+    # Generate answer
+    # ------------------------------------------------
+
+    answer = generate_answer(
+        prompt
+    )
+
+
+    # ------------------------------------------------
+    # Return
+    # ------------------------------------------------
+
+    return (
+        answer,
+        docs,
+        search_query
+    )
