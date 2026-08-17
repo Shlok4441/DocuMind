@@ -55,3 +55,21 @@ Google Gemini
      │
      ▼
 Grounded Answer + Sources
+
+DocuMind/
+│
+├── app.py
+├── requirements.txt
+├── README.md
+├── .gitignore
+│
+└── utils/
+    ├── chunker.py
+    ├── document_registry.py
+    ├── embeddings.py
+    ├── llm.py
+    ├── pdf_loader.py
+    ├── prompts.py
+    ├── qa_chain.py
+    ├── query_rewriter.py
+    └── vector_store.py
