@@ -7,14 +7,18 @@ from utils.vector_store import (
     load_vector_store,
     create_vector_store,
     add_documents_to_vector_store,
-    save_vector_store
+    save_vector_store,
+    delete_document_from_vector_store,
+    delete_entire_vector_store
 )
 
 from utils.document_registry import (
     calculate_file_hash,
     document_exists,
     register_document,
-    get_registered_documents
+    get_registered_documents,
+    delete_document,
+    clear_registry
 )
 
 from utils.qa_chain import answer_question
@@ -67,20 +71,153 @@ with st.sidebar:
         "to start asking questions."
     )
 
+
+
     # --------------------------------------------------------
-    # Current Documents
-    # --------------------------------------------------------
+# Current Documents
+# --------------------------------------------------------
 
-    registry = get_registered_documents()
+registry = get_registered_documents()
 
-    if registry:
+if registry:
 
-        st.markdown("### 📄 Current Documents")
+    st.markdown("### 📄 Current Documents")
 
-        for item in registry.values():
+    for file_hash, item in registry.items():
+
+        filename = item.get(
+            "filename",
+            "Unknown"
+        )
+
+        chunks = item.get(
+            "chunks",
+            0
+        )
+
+        col1, col2 = st.columns(
+            [3, 1]
+        )
+
+        with col1:
 
             st.caption(
-                f"📄 {item.get('filename', 'Unknown')}"
+                f"📄 {filename}"
+            )
+
+            st.caption(
+                f"{chunks} chunks"
+            )
+
+        with col2:
+
+            if st.button(
+                "🗑️",
+                key=f"delete_{file_hash}",
+                help=f"Delete {filename}"
+            ):
+
+                try:
+
+                    # ----------------------------------------
+                    # Remove document chunks from FAISS
+                    # ----------------------------------------
+
+                    st.session_state.vector_store = (
+                        delete_document_from_vector_store(
+                            st.session_state.vector_store,
+                            file_hash
+                        )
+                    )
+
+                    # ----------------------------------------
+                    # Remove document from registry
+                    # ----------------------------------------
+
+                    delete_document(
+                        file_hash
+                    )
+
+                    # ----------------------------------------
+                    # Save updated vector store
+                    # ----------------------------------------
+
+                    if (
+                        st.session_state.vector_store
+                        is not None
+                    ):
+
+                        save_vector_store(
+                            st.session_state.vector_store
+                        )
+
+                    else:
+
+                        # No documents remain
+                        delete_entire_vector_store()
+
+                    # ----------------------------------------
+                    # Clear old chat
+                    # ----------------------------------------
+
+                    st.session_state.chat_history = []
+
+                    st.success(
+                        f"Deleted {filename}"
+                    )
+
+                    st.rerun()
+
+                except Exception as e:
+
+                    st.error(
+                        f"❌ Could not delete "
+                        f"{filename}: {e}"
+                    )
+
+    # --------------------------------------------------------
+    # Clear All Documents
+    # --------------------------------------------------------
+
+    st.markdown("---")
+
+    if st.button(
+        "🗑️ Clear All Documents",
+        use_container_width=True
+    ):
+
+        try:
+
+            # --------------------------------------------
+            # Delete FAISS vector store
+            # --------------------------------------------
+
+            delete_entire_vector_store()
+
+            # --------------------------------------------
+            # Clear document registry
+            # --------------------------------------------
+
+            clear_registry()
+
+            # --------------------------------------------
+            # Reset session state
+            # --------------------------------------------
+
+            st.session_state.vector_store = None
+
+            st.session_state.chat_history = []
+
+            st.success(
+                "✅ All documents deleted."
+            )
+
+            st.rerun()
+
+        except Exception as e:
+
+            st.error(
+                f"❌ Could not clear documents: {e}"
             )
 
     # --------------------------------------------------------
