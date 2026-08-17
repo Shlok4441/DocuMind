@@ -24,8 +24,7 @@ https://documind-tgbfuiptg92xfh3exh279p.streamlit.app/
 🛡️ Restrict answers to information available in uploaded documents
 🌐 Deploy using Streamlit Community Cloud
 
-**🧠 How It Works
-**
+**🧠 How It Works**
 DocuMind AI follows a standard RAG pipeline:
 
 PDF Document
@@ -53,17 +52,14 @@ Source-Grounded Answer
 For follow-up questions, the previous conversation is used to rewrite the question into a standalone query before performing retrieval.
 
 **🛠️ Tech Stack**
-
-Technology	Purpose
-Python	     Core programming language
-Streamlit 	Web application and UI
-PyPDF     	PDF text extraction
-LangChain	     Document processing and text splitting
-Sentence 
-Transformers	Text embeddings
-FAISS	     Vector similarity search
-Google Gemini	Answer generation
-python-dotenv	Environment variable management
+Python, 
+ Streamlit, 	
+ PyPDF,     	
+ LangChain,	     
+ Sentence Transformers,	
+ FAISS,	     
+ Google Gemini,	
+ python-dotenv	
 
 **📁 Project Structure**
 
@@ -248,35 +244,35 @@ A production-ready multi-user implementation would isolate each user's documents
 
 This project was developed to understand and implement:
 
-Retrieval-Augmented Generation (RAG)
-PDF document ingestion
-Text extraction
-Recursive text chunking
-Chunk overlap
-Text embeddings
-Vector databases
-FAISS similarity search
-Semantic retrieval
-Prompt engineering
-Query rewriting
-Conversational question answering
-Source attribution
-LLM integration
-Streamlit application development
-Cloud deployment
+Retrieval-Augmented Generation (RAG),
+ PDF document ingestion,
+ Text extraction,
+ Recursive text chunking,
+ Chunk overlap,
+ Text embeddings,
+ Vector databases,
+ FAISS similarity search,
+ Semantic retrieval,
+ Prompt engineering,
+ Query rewriting,
+ Conversational question answering,
+ Source attribution,
+ LLM integration,
+ Streamlit application development,
+ Cloud deployment
 
 **🔮 Future Improvements**
 
 Possible improvements include:
 
-👤 User authentication
-🔐 User-specific document isolation
-🗑️ Document deletion from the UI
-🔎 Improved retrieval and reranking
-📚 Support for additional file formats
-💬 Conversation export
-⚡ Streaming responses
-📊 Retrieval evaluation and performance metrics
+👤 User authentication,
+ 🔐 User-specific document isolation,
+ 🗑️ Document deletion from the UI,
+ 🔎 Improved retrieval and reranking,
+ 📚 Support for additional file formats,
+ 💬 Conversation export,
+ ⚡ Streaming responses,
+ 📊 Retrieval evaluation and performance metrics
 
 **👨‍💻 Author**
 Shlok Gawade
