@@ -12,17 +12,17 @@ https://documind-tgbfuiptg92xfh3exh279p.streamlit.app/
 
 **✨ Features**
 
-📄 Upload one or multiple PDF documents
-🔍 Extract text from PDF documents
-✂️ Split documents into smaller overlapping chunks
-🧠 Generate embeddings for document chunks
-🔎 Perform semantic similarity search using FAISS
-🤖 Generate answers using Google Gemini
-🔄 Rewrite follow-up questions into standalone questions
-💬 Support conversational question answering
-📌 Display document, page, and chunk sources
-🛡️ Restrict answers to information available in uploaded documents
-🌐 Deploy using Streamlit Community Cloud
+📄 Upload one or multiple PDF documents,
+ 🔍 Extract text from PDF documents,
+ ✂️ Split documents into smaller overlapping chunks,
+ 🧠 Generate embeddings for document chunks,
+ 🔎 Perform semantic similarity search using FAISS,
+ 🤖 Generate answers using Google Gemini,
+ 🔄 Rewrite follow-up questions into standalone questions,
+ 💬 Support conversational question answering,
+ 📌 Display document, page, and chunk sources,
+ 🛡️ Restrict answers to information available in uploaded documents,
+ 🌐 Deploy using Streamlit Community Cloud
 
 **🧠 How It Works**
 DocuMind AI follows a standard RAG pipeline:
