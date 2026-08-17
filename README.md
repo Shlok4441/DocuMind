@@ -22,6 +22,19 @@ The project was built to understand the core concepts behind **RAG, document pro
 - 🛡️ Restrict answers to information available in uploaded documents
 - 🌐 Deploy using Streamlit Community Cloud
 
+For follow-up questions, the previous conversation is used to rewrite the question into a standalone query before performing retrieval.
+
+🛠️ Tech Stack
+Technology	Purpose
+Python	Core programming language
+Streamlit	Web application and UI
+PyPDF / PDF Processing	PDF text extraction
+LangChain	Document processing and text splitting
+Sentence Transformers	Text embeddings
+FAISS	Vector similarity search
+Google Gemini	Answer generation
+python-dotenv	Environment variable management
+
 ## 🧠 How It Works
 
 DocuMind AI follows a standard RAG pipeline:
@@ -56,6 +69,8 @@ Google Gemini
      ▼
 Grounded Answer + Sources
 
+📁 Project Structure
+
 DocuMind/
 │
 ├── app.py
@@ -73,3 +88,4 @@ DocuMind/
     ├── qa_chain.py
     ├── query_rewriter.py
     └── vector_store.py
+
